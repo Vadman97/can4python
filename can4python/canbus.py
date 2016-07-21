@@ -3,14 +3,14 @@
 # Author: Jonas Berg
 # Copyright (c) 2015, Semcon Sweden AB
 # All rights reserved.
-# 
-# Redistribution and use in source and binary forms, with or without modification, are permitted 
+#
+# Redistribution and use in source and binary forms, with or without modification, are permitted
 # provided that the following conditions are met:
 # 1. Redistributions of source code must retain the above copyright notice, this list of conditions and the
 #    following disclaimer.
-# 2. Redistributions in binary form must reproduce the above copyright notice,  this list of conditions and 
+# 2. Redistributions in binary form must reproduce the above copyright notice,  this list of conditions and
 #    the following disclaimer in the documentation and/or other materials provided with the distribution.
-# 3. Neither the name of the Semcon Sweden AB nor the names of its contributors may be used to endorse or 
+# 3. Neither the name of the Semcon Sweden AB nor the names of its contributors may be used to endorse or
 #    promote products derived from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
@@ -23,7 +23,7 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-# 
+#
 
 import logging
 
@@ -50,20 +50,25 @@ class CanBus():
     Args:
       config (:class:`.Configuration` object): Configuration object describing what is happening on the bus.
       interfacename (str): Name of the Linux SocketCan interface to use. For example ``'vcan0'`` or ``'can1'``.
+        ``None`` for only parse/decode functionality without using SocketCAN
       timeout (numerical): Timeout value in seconds for :meth:`.recv_next_signals()`. Defaults
         to :const:`None` (blocking read).
       use_bcm (bool): True if the SocketCan Broadcast manager (BCM) should be used. Defaults to False.
 
     """
-    def __init__(self, config, interfacename, timeout=None, use_bcm=False):
+
+    def __init__(self, config, interfacename=None, timeout=None, use_bcm=False):
         self._configuration = config
         self._use_bcm = use_bcm
 
-        # Initialize CAN interface
-        if self._use_bcm:
-            self.caninterface = caninterface_bcm.SocketCanBcmInterface(str(interfacename), timeout)
+        if interfacename:
+            # Initialize CAN interface
+            if self._use_bcm:
+                self.caninterface = caninterface_bcm.SocketCanBcmInterface(str(interfacename), timeout)
+            else:
+                self.caninterface = caninterface_raw.SocketCanRawInterface(str(interfacename), timeout)
         else:
-            self.caninterface = caninterface_raw.SocketCanRawInterface(str(interfacename), timeout)
+            self.caninterface = None
 
         # Dict of signaldefinition objects for outgoing signals. Keys are signalnames (str).
         self._output_signaldefinition_storage = {}
@@ -100,7 +105,7 @@ class CanBus():
         logging.debug("Initialized {}".format(repr(self)))
 
     @classmethod
-    def from_kcd_file(cls, filename, interfacename, timeout=None, busname=None, use_bcm=False, ego_node_ids=None):
+    def from_kcd_file(cls, filename, interfacename=None, timeout=None, busname=None, use_bcm=False, ego_node_ids=None):
         """
         Create a :class:`.CanBus`, using settings from a configuration file.
 
@@ -108,7 +113,7 @@ class CanBus():
 
         Args:
           filename (str): Full path to existing configutation file, in the KCD file format.
-          interfacename (str): For example ``'vcan0'`` or ``'can1'``.
+          interfacename (str): For example ``'vcan0'`` or ``'can1'`` (``None`` for only parse/decode functionality).
           timeout (numerical): Timeout value in seconds for :meth:`.recv_next_signals()`. Defaults
             to :const:`None` (the recv_next_signals call will be blocking).
           busname (str or None): Which bus name in the messagedefinitions file to use. Defaults
@@ -123,8 +128,9 @@ class CanBus():
 
     def __repr__(self):
         protocol_string = "BCM" if self._use_bcm else "RAW"
+        interface_string = self.caninterface._interfacename if self.caninterface else "NO INTERFACE"
         return "CAN bus '{}' on CAN interface: {}, having {} frameIDs defined. Protocol {}".format(
-            self._configuration.busname, self.caninterface._interfacename,
+            self._configuration.busname, interface_string,
             len(self._configuration.framedefinitions), protocol_string)
 
     def init_reception(self):
@@ -183,7 +189,7 @@ class CanBus():
 
     def send_signals(self, *args, **kwargs):
         """Send CAN signals in frames.
-        
+
         Args:
          signals_to_send (dict): The signal values to send_frame. The keys are the signalnames (*str*),
            and the items are the values (*numerical* or *None*). If the value is *None* the default value is used.
@@ -197,7 +203,7 @@ class CanBus():
 
         Raises:
           CanException: When failing to set signal value etc. See :exc:`.CanException`.
-        
+
         """
         if args:
             if isinstance(args[0], dict):
@@ -284,14 +290,14 @@ class CanBus():
 
     def get_descriptive_ascii_art(self):
         """Display an overview of the :class:`.CanBus` object with frame definitions and signal definitions.
-        
+
         Returns:
           A multi-line string.
 
         """
         text = repr(self) + "\n"
         text += "    " + self._configuration.get_descriptive_ascii_art()
-        return text   
+        return text
 
     # def get_all_signalnames(self):
     # # Input or output? Why?
@@ -299,7 +305,7 @@ class CanBus():
     #     print("#***#")
     #     print(self._output_signaldefinition_storage)
     #     return sorted(self._output_signaldefinition_storage.keys())
-                
+
     def write_configuration(self, filename):
         """Write configuration to file.
 
